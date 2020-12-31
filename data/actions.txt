@@ -1,11 +1,10 @@
-T1 2
 READ(A,t)
 t:=t*2
 WRITE(A,t)
-OUTPUT(A)
-
-T2 3
 READ(B,t)
 t:=t+2
 WRITE(B,t)
+flush log
+OUTPUT(A)
 OUTPUT(B)
+flush log

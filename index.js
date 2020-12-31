@@ -10,24 +10,25 @@
 // commit not found (set variables to old values) from logs
 // output result
 
-// const reader = require('./src/reader');
-// const logger = require('./src/logger');
-const {readLineByLine} = require("./src/reader");
-const { readWithLineNum, readFile, getFirstLine, promptForLineNumber } = require('./src/services/utils');
-const { getVariableValues } = require("./src/reader");
+const {LOG_FILE_PATH} = require("./src/constants");
+const {VARS_FILE_PATH} = require("./src/constants");
+const {ACTIONS_FILE_PATH} = require("./src/constants");
+const { getVariableValues, readLineByLine } = require("./src/services/reader");
+const { readWithLineNum,  getFirstLine, promptForLineNumber } = require('./src/services/utils');
+
 
 const app = async () => {
-    const ACTIONS_FILE_PATH = './actions.txt'
-    try {
-        const data = await readWithLineNum(ACTIONS_FILE_PATH);
-        console.log(data);
-        const firstLine = await getFirstLine(ACTIONS_FILE_PATH);
-        const [a, b] = getVariableValues(firstLine);
-        console.log('Value of A:',a);
-        console.log('Value of B:', b);
-        const answer = await promptForLineNumber();
-        console.log(readLineByLine(ACTIONS_FILE_PATH));
 
+    try {
+        await readWithLineNum(ACTIONS_FILE_PATH).then(data => console.log(data));
+        await getFirstLine(VARS_FILE_PATH).then((line)=>{
+            const [a, b] = getVariableValues(line);
+            console.log('Value of A:',a);
+            console.log('Value of B:', b);
+        });
+        await promptForLineNumber().then((answer)=>{
+            readLineByLine(answer, ACTIONS_FILE_PATH, VARS_FILE_PATH, LOG_FILE_PATH);
+        });
     } catch (e) {
         console.log(e)
     }
