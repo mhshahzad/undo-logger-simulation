@@ -1,4 +1,3 @@
-const rl = require('readline');
 const fs = require('fs');
 const utils = require('./utils')
 const logger = require("./logger");
@@ -9,9 +8,24 @@ const { writeVarFile } = require("./utils");
         return [ strArray[1], strArray[3] ]
     }
     const handleFlushLog = async (logBuffer, logsFile) => {
-        for (const val of logBuffer) {
-            await logger.mainLogger(`${val}`, logsFile)
-        }
+        fs.readFile(logsFile, async (err, file) => {
+            if(file.length === 0){
+                for (const val of logBuffer) {
+                    await logger.appendLogger(`${val}`, logsFile)
+                }
+            }else{
+                new Promise((resolve, reject) => {
+                    fs.writeFile(logsFile, '', ()=>{
+                        const logger =  fs.createWriteStream(logsFile);
+                        for (const val of logBuffer) {
+                            logger.write(val + "\r\n");
+                        }
+                        resolve(logger.close());
+                    });
+                }).catch((e)=> console.log(e))
+            }
+        })
+
     }
     const handleReadAction = async (varName, varsFilePath) => {
         // copy value to local variable t
@@ -35,7 +49,6 @@ const { writeVarFile } = require("./utils");
                 varName: 'A',
                 value: val
             });
-            // await logger.mainLogger(`<T, A, ${val}>`)
             newLogBuffer.push(`<T, A, ${oldVal}>`);
         }
         if (name === 'B'){
@@ -44,7 +57,6 @@ const { writeVarFile } = require("./utils");
                 varName: 'B',
                 value: val
             });
-            // await logger.mainLogger(`<T, B, ${val}>`)
             newLogBuffer.push(`<T, B, ${oldVal}>`);
         }
         return [newBuffer, newLogBuffer];
@@ -54,7 +66,7 @@ const { writeVarFile } = require("./utils");
         const result = buffer.filter(obj => {
             return obj.varName === varName
         });
-        await writeVarFile(varName, result.value, filePath);
+        await writeVarFile(varName, result[0].value, filePath);
     }
     const handleOperations = (line, t) => {
         let tParsed = parseInt(t);
@@ -74,24 +86,23 @@ const { writeVarFile } = require("./utils");
         let t;
         let valBuffer = [];
         let logBuffer = [];
-        let lineCount = 1;
         let rA = /^READ\(A,t\)$/gm;
         let rB = /^READ\(B,t\)$/gm;
         let wA = /^WRITE\(A,t\)$/gm;
         let wB = /^WRITE\(B,t\)$/gm;
-        let oA = /^OUTPUT\(A,t\)$/gm;
-        let oB = /^OUTPUT\(B,t\)$/gm;
+        let oA = /^OUTPUT\(A\)$/gm;
+        let oB = /^OUTPUT\(B\)$/gm;
         fs.readFile(actionsFiles, async (err, data) => {
             if(err) throw err;
             const array = data.toString().split("\n");
             for (const v of array) {
                 let i = array.indexOf(v);
-                if (lineCount === noOfLines){
+                if (i === noOfLines){
                     break;
                 }
                 // write to log the start of transaction
-                if (lineCount === 1){
-                    await logger.mainLogger('Start T', logsFile);
+                if (i === 0){
+                    logBuffer.push('START T');
                 }
                 if (v.search(rA) !== -1){
                     t = await handleReadAction('A',varsFile);
@@ -114,7 +125,7 @@ const { writeVarFile } = require("./utils");
                 }
                 else if (v.search(oB) !== -1){
                     await handleOutputAction('B', valBuffer, varsFile)
-                        .then(() => logger.mainLogger('COMMIT T', logsFile));
+                        .then(() => logBuffer.push('COMMIT T'));
                 }
                 else if (v.startsWith('t:=')){
                     t = handleOperations(v, t);
@@ -122,9 +133,9 @@ const { writeVarFile } = require("./utils");
                 else if (v.startsWith('flush')){
                     await handleFlushLog(logBuffer, logsFile);
                 }
-                lineCount++;
             }
         });
     }
 
-    module.exports= {readLineByLine, getVariableValues}
+
+    module.exports= { readLineByLine, getVariableValues }

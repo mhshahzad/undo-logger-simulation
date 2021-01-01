@@ -10,9 +10,9 @@ module.exports = {
                     reject(err);
                 }
                 if (varName === 'A'){
-                    result = data.replace(/[B]{1}\s\d{1}/gm, `B ${val}`);
+                    result = data.replace(/[A]{1}\s\d{1}/gm, `A ${val}`);
                 } else {
-                    result = data.replace(/[B]{1}\s\d{1}/gm, `A ${val}`);
+                    result = data.replace(/[B]{1}\s\d{1}/gm, `B ${val}`);
                 }
                 fs.writeFile(path, result, 'utf8', function (err) {
                     if (err) {
@@ -42,8 +42,8 @@ module.exports = {
                     input: fs.createReadStream(path),
                     terminal: false
                 }).on('line', (line) => {
-                    counter++;
                     data.push(`Line:${counter} ` + line);
+                    counter++;
                 }).on('close',() => {
                     resolve(data);
                 }).on('SIGSTP',()=>{
@@ -71,6 +71,18 @@ module.exports = {
             });
             rl.question('Choose the failure point by giving the line number as input: ', (answer) => {
                 resolve(parseInt(answer));
+                rl.close()
+            });
+        })
+    },
+    promptForRecovery: () =>{
+        return new Promise((resolve, reject)=>{
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+            rl.question('Do you wish to start recovery? (Y, N): ', (answer) => {
+                resolve(answer);
                 rl.close()
             });
         })
