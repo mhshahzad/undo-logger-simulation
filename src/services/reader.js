@@ -13,7 +13,7 @@ const { writeVarFile } = require("./utils");
             await logger.mainLogger(`${val}`, logsFile)
         }
     }
-    const handleReadAction = async (varName, line, varsFilePath) => {
+    const handleReadAction = async (varName, varsFilePath) => {
         // copy value to local variable t
         const fLine = await utils.getFirstLine(varsFilePath);
         const [a, b] = getVariableValues(fLine);
@@ -23,31 +23,30 @@ const { writeVarFile } = require("./utils");
             return b;
         }
     }
-    const handleWriteAction = async (name, val, buffer, logBuffer) => {
+    const handleWriteAction = async (name, val, buffer, logBuffer, varsFile) => {
         // copy value to buffer object
         // write to local log
-        console.log('entered');
         let newBuffer = JSON.parse(JSON.stringify(buffer));
         let newLogBuffer = JSON.parse(JSON.stringify(logBuffer));
 
         if (name === 'A'){
+            const oldVal = await handleReadAction(name, varsFile);
             newBuffer.push({
                 varName: 'A',
                 value: val
             });
             // await logger.mainLogger(`<T, A, ${val}>`)
-            newLogBuffer.push(`<T, A, ${val}>`);
+            newLogBuffer.push(`<T, A, ${oldVal}>`);
         }
         if (name === 'B'){
+            const oldVal = await handleReadAction(name, varsFile);
             newBuffer.push({
                 varName: 'B',
                 value: val
             });
             // await logger.mainLogger(`<T, B, ${val}>`)
-            newLogBuffer.push(`<T, B, ${val}>`);
+            newLogBuffer.push(`<T, B, ${oldVal}>`);
         }
-        console.log(newLogBuffer);
-        console.log(newBuffer);
         return [newBuffer, newLogBuffer];
     }
     const handleOutputAction = async (varName, buffer, filePath) => {
@@ -58,60 +57,72 @@ const { writeVarFile } = require("./utils");
         await writeVarFile(varName, result.value, filePath);
     }
     const handleOperations = (line, t) => {
+        let tParsed = parseInt(t);
         const checkMult = line.search(/\*/g);
         const checkAdd = line.search(/\+/g);
         if(checkMult !== -1 ){
             let val = line.substr(-1);
             let valInt = parseInt(val);
-            return t * valInt;
+            return tParsed * valInt;
         } else if(checkAdd !== -1){
             let val = line.substr(-1);
             let valInt = parseInt(val);
-            return t + valInt;
+            return tParsed + valInt;
         }
     }
     const readLineByLine = (noOfLines, actionsFiles, varsFile, logsFile) => {
         let t;
         let valBuffer = [];
         let logBuffer = [];
-        let lineCount = 0;
+        let lineCount = 1;
+        let rA = /^READ\(A,t\)$/gm;
+        let rB = /^READ\(B,t\)$/gm;
+        let wA = /^WRITE\(A,t\)$/gm;
+        let wB = /^WRITE\(B,t\)$/gm;
+        let oA = /^OUTPUT\(A,t\)$/gm;
+        let oB = /^OUTPUT\(B,t\)$/gm;
         fs.readFile(actionsFiles, async (err, data) => {
             if(err) throw err;
             const array = data.toString().split("\n");
-            for(let line in array) {
-                lineCount++;
+            for (const v of array) {
+                let i = array.indexOf(v);
                 if (lineCount === noOfLines){
-                    return;
+                    break;
                 }
                 // write to log the start of transaction
                 if (lineCount === 1){
                     await logger.mainLogger('Start T', logsFile);
                 }
-                if (line.startsWith('READ(A,t)')){
-                    t = await handleReadAction('A',line, varsFile);
+                if (v.search(rA) !== -1){
+                    t = await handleReadAction('A',varsFile);
                 }
-                else if (line.startsWith('READ(B,t)')){
-                    t = await handleReadAction('B',line, varsFile);
+                else if (v.search(rB) !== -1){
+                    t = await handleReadAction('B', varsFile);
                 }
-                else if (line.startsWith('WRITE(A,t)')){
-                    [newBuffer, newLogBuffer] = await handleWriteAction('A',t, valBuffer, logBuffer);
+                else if (v.search(wA) !== -1){
+                    [newBuffer, newLogBuffer] = await handleWriteAction('A',t, valBuffer, logBuffer, varsFile);
+                    logBuffer = newLogBuffer;
+                    valBuffer = newBuffer;
                 }
-                else if (line.startsWith('WRITE(B,t)')) {
-                    [newBuffer, newLogBuffer] = await handleWriteAction('B', t, valBuffer, logBuffer);
+                else if (v.search(wB) !== -1) {
+                    [newBuffer, newLogBuffer] = await handleWriteAction('B', t, valBuffer, logBuffer, varsFile);
+                    logBuffer = newLogBuffer;
+                    valBuffer = newBuffer;
                 }
-                else if (line.startsWith('OUTPUT(A)')){
+                else if (v.search(oA) !== -1){
                     await handleOutputAction('A', valBuffer, varsFile);
                 }
-                else if (line.startsWith('OUTPUT(B)')){
-                    await handleOutputAction('B', valBuffer, varsFile);
-                    await logger.mainLogger('COMMIT T', logsFile);
+                else if (v.search(oB) !== -1){
+                    await handleOutputAction('B', valBuffer, varsFile)
+                        .then(() => logger.mainLogger('COMMIT T', logsFile));
                 }
-                else if (line.startsWith('t:=')){
-                    t = handleOperations(line, t);
+                else if (v.startsWith('t:=')){
+                    t = handleOperations(v, t);
                 }
-                else if (line.startsWith('flush')){
+                else if (v.startsWith('flush')){
                     await handleFlushLog(logBuffer, logsFile);
                 }
+                lineCount++;
             }
         });
     }
